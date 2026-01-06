@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>モンスト反射シミュレータ（最終決定版）</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; display: flex; flex-direction: column; height: 100vh; font-family: sans-serif; }
+        #canvas-container { flex: 1; position: relative; background: #111; display: flex; justify-content: center; align-items: center; overflow: hidden; }
+        canvas { display: block; touch-action: none; background: #000; }
+        #toolbar { height: 80px; background: #d3d3d3; display: flex; justify-content: space-around; align-items: center; border-top: 2px solid #999; padding-bottom: env(safe-area-inset-bottom); z-index: 2000; }
+        .tool-btn { display: flex; flex-direction: column; align-items: center; cursor: pointer; color: #333; font-size: 10px; flex: 1; }
+        .tool-icon { width: 34px; height: 34px; border: 1px solid #777; border-radius: 4px; display: flex; justify-content: center; align-items: center; background: #fff; font-size: 20px; margin-bottom: 2px; }
+        .active .tool-icon { background: #007AFF; color: #fff; }
+        #settings { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.85); padding: 15px; border-radius: 10px; color: white; font-size: 12px; z-index: 1000; display: none; }
+        #settings.show { display: block; }
+    </style>
+</head>
+<body>
+
+<div id="canvas-container">
+    <div id="settings">
+        左右壁: <input type="range" id="sM" min="0"><br>
+        上部壁: <input type="range" id="tM" min="0"><br>
+        下部壁: <input type="range" id="bM" min="0"><br>
+        <button onclick="blocks=[];draw();" style="margin-top:10px;">🗑 ブロック全消去</button>
+    </div>
+    <canvas id="canvas"></canvas>
+</div>
+
+<div id="toolbar">
+    <label class="tool-btn"><input type="file" id="imgInput" accept="image/*" style="display:none"><div class="tool-icon">🖼</div>スクショ</label>
+    <div class="tool-btn" id="blockBtn"><div class="tool-icon">＋</div>ブロック</div>
+    <div class="tool-btn" id="refBtn"><div class="tool-icon" id="refNum">10</div>反射数</div>
+    <div class="tool-btn" onclick="document.getElementById('settings').classList.toggle('show')"><div class="tool-icon">⚙</div>調整</div>
+</div>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+let img = null, start = {x:0, y:0}, target = {x:0, y:0}, maxRef = 10, blocks = [], isAddingBlock = false, isDragging = false, isDraggingStart = false;
+let m = { side: 15, top: 120, bottom: 230 };
+
+function updateSliders(width, height) {
+    const sMSlider = document.getElementById('sM');
+    const tMSlider = document.getElementById('tM');
+    const bMSlider = document.getElementById('bM');
+
+    sMSlider.max = width / 2;
+    tMSlider.max = height;
+    bMSlider.max = height;
+
+    sMSlider.value = m.side;
+    tMSlider.value = m.top;
+    bMSlider.value = m.bottom;
+}
+
+function init() {
+    const container = document.getElementById("canvas-container");
+    canvas.width = container.clientWidth;
+    canvas.height = container.clientHeight;
+    updateSliders(canvas.width, canvas.height);
+    start = { x: canvas.width / 2, y: canvas.height * 0.7 };
+    target = { x: start.x + 50, y: start.y - 100 };
+    draw();
+}
+
+document.getElementById("imgInput").addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        const newImg = new Image();
+        newImg.onload = function() {
+            img = newImg;
+            const container = document.getElementById("canvas-container");
+            const scale = container.clientHeight / img.height;
+            
+            canvas.height = container.clientHeight;
+            canvas.width = img.width * scale;
+
+            // --- 壁の自動計算ロジック（最終決定版） ---
+            // ユーザーの環境で発生したズレを逆算して補正した最終比率
+            // ★★★★★★★ ここが最終決定版の比率です ★★★★★★★
+            const sideMarginRatio = 0.027;   // 左右の余白の比率 (完璧なため変更なし)
+            const topMarginRatio = 0.118;   // 上部の余白の比率 (最終調整)
+            const bottomMarginRatio = 0.346;  // 下部の余白の比率 (最終調整)
+            // ★★★★★★★★★★★★★★★★★★★★★★★★★
+
+            m.side = canvas.width * sideMarginRatio;
+            m.top = canvas.height * topMarginRatio;
+            m.bottom = canvas.height * bottomMarginRatio;
+
+            updateSliders(canvas.width, canvas.height);
+
+            start = { x: canvas.width / 2, y: canvas.height * 0.7 };
+            target = { x: start.x, y: start.y - 100 };
+            
+            setTimeout(draw, 50);
+        };
+        newImg.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+});
+
+
+document.getElementById("refBtn").onclick = () => {
+    maxRef = maxRef >= 25 ? 5 : maxRef + 5;
+    document.getElementById("refNum").innerText = maxRef;
+    draw();
+};
+
+document.getElementById("blockBtn").onclick = function() {
+    isAddingBlock = !isAddingBlock;
+    this.classList.toggle("active", isAddingBlock);
+};
+
+['sM', 'tM', 'bM'].forEach(id => document.getElementById(id).oninput = e => {
+    m[id === 'sM' ? 'side' : id === 'tM' ? 'top' : 'bottom'] = parseInt(e.target.value);
+    draw();
+});
+
+function drawHex(x, y, size) {
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+        ctx.lineTo(x + size * Math.cos(i * Math.PI / 3), y + size * Math.sin(i * Math.PI / 3));
+    }
+    ctx.closePath();
+    ctx.strokeStyle = "#00ffff";
+    ctx.lineWidth = 3;
+    ctx.setLineDash([]);
+    ctx.stroke();
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    if (img) {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    } else {
+        ctx.fillStyle = "#222";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    const L = m.side, R = canvas.width - m.side, T = m.top, B = canvas.height - m.bottom;
+    
+    ctx.strokeStyle = "rgba(0, 150, 255, 0.4)";
+    ctx.setLineDash([5, 5]);
+    ctx.strokeRect(L, T, R - L, B - T);
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = "#00ff00";
+    ctx.lineWidth = 2;
+    blocks.forEach(b => ctx.strokeRect(b.x, b.y, b.w, b.h));
+
+    let cx = start.x, cy = start.y;
+    let vx = target.x - start.x, vy = target.y - start.y;
+    const mag = Math.hypot(vx, vy);
+
+    if (mag > 1) { 
+        vx /= mag; vy /= mag;
+        
+        const pathPoints = [start];
+        const hexPoints = [];
+
+        for (let i = 0; i < maxRef; i++) {
+            let t = Infinity;
+            let side = ""; 
+            let hitBlock = false;
+            const minDistance = 0.001;
+
+            if (vx > 0) { let d = (R - cx) / vx; if (d > minDistance && d < t) { t = d; side = "x"; hitBlock = false; } }
+            if (vx < 0) { let d = (L - cx) / vx; if (d > minDistance && d < t) { t = d; side = "x"; hitBlock = false; } }
+            if (vy > 0) { let d = (B - cy) / vy; if (d > minDistance && d < t) { t = d; side = "y"; hitBlock = false; } }
+            if (vy < 0) { let d = (T - cy) / vy; if (d > minDistance && d < t) { t = d; side = "y"; hitBlock = false; } }
+
+            blocks.forEach(b => {
+                if (vx > 0) { let d = (b.x - cx) / vx; let y = cy + vy * d; if (d > minDistance && d < t && y >= b.y && y <= b.y + b.h) { t = d; side = "x"; hitBlock = true; } }
+                if (vx < 0) { let d = (b.x + b.w - cx) / vx; let y = cy + vy * d; if (d > minDistance && d < t && y >= b.y && y <= b.y + b.h) { t = d; side = "x"; hitBlock = true; } }
+                if (vy > 0) { let d = (b.y - cy) / vy; let x = cx + vx * d; if (d > minDistance && d < t && x >= b.x && x <= b.x + b.w) { t = d; side = "y"; hitBlock = true; } }
+                if (vy < 0) { let d = (b.y + b.h - cy) / vy; let x = cx + vx * d; if (d > minDistance && d < t && x >= b.x && x <= b.x + b.w) { t = d; side = "y"; hitBlock = true; } }
+            });
+
+            if (t === Infinity) break;
+
+            cx += vx * t;
+            cy += vy * t;
+            pathPoints.push({x: cx, y: cy});
+            hexPoints.push({x: cx, y: cy}); 
+
+            if (side === "x") { vx *= -1; cx += vx * 0.1; } 
+            else { vy *= -1; cy += vy * 0.1; }
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(pathPoints[0].x, pathPoints[0].y);
+        pathPoints.slice(1).forEach(p => ctx.lineTo(p.x, p.y));
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 4]);
+        ctx.stroke();
+
+        hexPoints.forEach(p => drawHex(p.x, p.y, 15));
+    }
+
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(start.x, start.y, 20, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 0, 0, 0.5)"; ctx.fill();
+    ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.stroke();
+}
+
+const getP = e => {
+    const r = canvas.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX - r.left, y: t.clientY - r.top };
+};
+
+const down = e => {
+    isDragging = true;
+    const p = getP(e);
+    if (isAddingBlock) {
+        blocks.push({ x: p.x - 40, y: p.y - 40, w: 80, h: 80 });
+        draw();
+    } else if (Math.hypot(p.x - start.x, p.y - start.y) < 40) {
+        isDraggingStart = true;
+    } else {
+        target = p;
+        draw();
+    }
+};
+
+const move = e => {
+    if (!isDragging) return;
+    const p = getP(e);
+    if (isDraggingStart) start = p; else if (!isAddingBlock) target = p;
+    draw();
+    if(e.cancelable) e.preventDefault();
+};
+
+const up = () => { isDragging = false; isDraggingStart = false; };
+
+canvas.addEventListener("mousedown", down);
+window.addEventListener("mousemove", move);
+window.addEventListener("mouseup", up);
+canvas.addEventListener("touchstart", down, {passive: false});
+canvas.addEventListener("touchmove", move, {passive: false});
+canvas.addEventListener("touchend", up);
+
+window.onload = init;
+</script>
+</body>
+</html>
