@@ -80,18 +80,16 @@ document.getElementById("imgInput").addEventListener('change', function(e) {
             canvas.height = container.clientHeight;
             canvas.width = img.width * scale;
 
-            // --- 壁の自動計算ロジック（最終決定版） ---
-            // ユーザーの環境で発生したズレを逆算して補正した最終比率
-            // ★★★★★★★ ここが最終決定版の比率です ★★★★★★★
-            const sideMarginRatio = 0.027;   // 左右の余白の比率 (完璧なため変更なし)
-            const topMarginRatio = 0.118;   // 上部の余白の比率 (最終調整)
-            const bottomMarginRatio = 0.346;  // 下部の余白の比率 (最終調整)
-            // ★★★★★★★★★★★★★★★★★★★★★★★★★
+            // --- 壁の自動計算ロジック（iPhone実機 調整版） ---
+// 送っていただいたスクリーンショットのズレを解消する数値です
 
-            m.side = canvas.width * sideMarginRatio;
-            m.top = canvas.height * topMarginRatio;
-            m.bottom = canvas.height * bottomMarginRatio;
+const sideMarginRatio = 0.027;   // 左右：そのままでOK
+const topMarginRatio = 0.105;    // 上部：12.5%から10.5%へ（少し上に詰める）
+const bottomMarginRatio = 0.325; // 下部：23.5%から32.5%へ（かなり上に上げる）
 
+m.side = canvas.width * sideMarginRatio;
+m.top = canvas.height * topMarginRatio;
+m.bottom = canvas.height * bottomMarginRatio;
             updateSliders(canvas.width, canvas.height);
 
             start = { x: canvas.width / 2, y: canvas.height * 0.7 };
