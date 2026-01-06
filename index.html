@@ -80,17 +80,16 @@ document.getElementById("imgInput").addEventListener('change', function(e) {
             canvas.height = container.clientHeight;
             canvas.width = img.width * scale;
 
-            // --- 壁の自動計算ロジック（iPhone実機 調整版） ---
-// 送っていただいたスクリーンショットのズレを解消する数値です
+          // --- 壁の自動計算ロジック（最終微調整版） ---
+// 上側の壁をボスHPバーのすぐ下まで引き下げました
 
-const sideMarginRatio = 0.027;   // 左右：そのままでOK
-const topMarginRatio = 0.105;    // 上部：12.5%から10.5%へ（少し上に詰める）
-const bottomMarginRatio = 0.325; // 下部：23.5%から32.5%へ（かなり上に上げる）
+const sideMarginRatio = 0.027;   // 左右：完璧なため維持
+const topMarginRatio = 0.126;    // 上部：0.105 → 0.126 に変更（約2%分、下に下げました）
+const bottomMarginRatio = 0.325; // 下部：完璧なため維持
 
 m.side = canvas.width * sideMarginRatio;
 m.top = canvas.height * topMarginRatio;
 m.bottom = canvas.height * bottomMarginRatio;
-            updateSliders(canvas.width, canvas.height);
 
             start = { x: canvas.width / 2, y: canvas.height * 0.7 };
             target = { x: start.x, y: start.y - 100 };
