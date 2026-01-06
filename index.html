@@ -83,9 +83,12 @@ document.getElementById("imgInput").addEventListener('change', function(e) {
           // --- 壁の自動計算ロジック（最終微調整版） ---
 // 上側の壁をボスHPバーのすぐ下まで引き下げました
 
-const sideMarginRatio = 0.027;   // 左右：完璧なため維持
-const topMarginRatio = 0.126;    // 上部：0.105 → 0.126 に変更（約2%分、下に下げました）
-const bottomMarginRatio = 0.325; // 下部：完璧なため維持
+// --- 壁の自動計算ロジック（赤壁ターゲット版） ---
+// スクリーンショット内の「赤いライン」に青い点線を合わせるための調整です。
+
+const sideMarginRatio = 0.027;   // 左右：変更なし
+const topMarginRatio = 0.165;    // 上部：0.126 → 0.165 に大幅変更（壁を下に下げました）
+const bottomMarginRatio = 0.325; // 下部：変更なし
 
 m.side = canvas.width * sideMarginRatio;
 m.top = canvas.height * topMarginRatio;
